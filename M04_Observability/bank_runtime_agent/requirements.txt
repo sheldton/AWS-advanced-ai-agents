@@ -1,0 +1,8 @@
+# AnyCompany Bank assistant on AgentCore Runtime (MLADAS M04) — installed as linux/arm64 WHEELS ONLY
+# (uv --python-platform aarch64-manylinux2014 --only-binary :all:) by agentcore_observability.RuntimeObsDeployment.
+# aws-opentelemetry-distro (ADOT) + entryPoint ["opentelemetry-instrument", "agent.py"] = auto-instrumentation:
+# Strands, botocore (Bedrock) and Starlette spans with no tracing code in agent.py. Verified 2026-09-28 (research
+# runtime-traces F2); it resolves opentelemetry-api/sdk 1.44.0 inside the zip (the notebook kernel has 1.45.0).
+strands-agents[otel]==1.57.1
+bedrock-agentcore==1.23.1
+aws-opentelemetry-distro==0.20.0

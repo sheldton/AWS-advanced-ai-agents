@@ -19,6 +19,9 @@ What lives here (so the notebooks can focus on the agent patterns):
                      LEDGER.add_service(..., provider=) · tool_outcomes(agent, latest=) -> [{tool, input, status, text,
                      denied, tool_use_id}] (local and Gateway tools) · principal_of(invocation_state) ·
                      RefundPolicyGate(limit, tool=) / OwnershipGate() (local cancel_tool stand-ins for Cedar/identity)
+  * M04 observability -> AGENTCORE_PRICES for Runtime vCPU/GB-hours, Evaluations (custom/derived fee; built-in token
+                     prices for reference), CloudWatch high-resolution alarms, custom metrics, API requests, indexed
+                     spans · HOURS_PER_MONTH (730, CloudWatch proration). The M04 helpers live in agentcore_observability.
 
 Tested with strands-agents 1.57.1, bedrock-agentcore 1.23.1, a2a-sdk 0.3.26, boto3 1.43.x (Sept 2026).
 """
@@ -105,7 +108,24 @@ AGENTCORE_PRICES: dict[str, float] = {
     # AWS Secrets Manager, us-east-1 (Price List API AWSSecretsManager, 2026-09-27): each AgentCore Identity credential
     # provider keeps one service-managed secret in the account (research identity-outbound_facts l.28, l.77)
     "secrets_manager_secret_month": 0.40,            # per secret per month, prorated by the hour
+    # --- M04 additions (observability + evaluations). Sources: AWS Price List API (AmazonBedrockAgentCore,
+    # AmazonCloudWatch, AWSXRay) + the pricing pages, us-east-1, retrieved 2026-09-28 (M04 research: runtime-traces F35,
+    # evaluations F39-F40, loop-alarms §3). Runtime V1 (default platform); V2 is $0.1276 / $0.0169.
+    "runtime_vcpu_hour": 0.0895,                     # AgentCore Runtime, consumption-based vCPU-hour
+    "runtime_gb_hour": 0.00945,                      # AgentCore Runtime, consumption-based memory GB-hour
+    # Evaluations: custom AND derived evaluators bill a per-evaluation fee; their judge (Nova) tokens are ordinary
+    # Bedrock usage in the account (evaluations F10, F40). Built-in evaluators as-is bill tokens on an AWS-side judge.
+    "evaluation_custom": 0.0015,                     # per custom/derived evaluation ($1.50 per 1,000), judge tokens extra
+    "evaluation_builtin_input_token": 0.0000024,     # built-in evaluator, per input token ($2.40 per 1M) - never used here
+    "evaluation_builtin_output_token": 0.000012,     # built-in evaluator, per output token ($12.00 per 1M) - never used
+    # CloudWatch metrics/alarms: per metric or alarm per month, prorated by the hour (730 h/month)
+    "cloudwatch_alarm_highres_month": 0.30,          # high-resolution (10 s) metric alarm, per alarm-metric-month
+    "cloudwatch_alarm_standard_month": 0.10,         # standard (60 s) metric alarm
+    "cloudwatch_custom_metric_month": 0.30,          # custom metric (first 10k), per metric-month
+    "cloudwatch_api_request": 0.00001,               # PutMetricData / GetMetricData etc. ($0.01 per 1,000 requests)
+    "xray_span_indexed": 0.00000075,                 # Transaction Search: per indexed span (only the indexing % counts)
 }
+HOURS_PER_MONTH = 730                                # CloudWatch prorates monthly metric/alarm prices by the hour
 
 _SESSION: boto3.Session | None = None
 

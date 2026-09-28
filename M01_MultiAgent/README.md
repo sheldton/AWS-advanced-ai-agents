@@ -77,14 +77,14 @@ In our test runs (Sept 2026); "x/N" counts runs.
 | §2 routing trace | one question fans out to both the cards and the lending specialist (6/6); every hop carries a header added by a hook; no invented follow-up promises in the team's 4 answers (6/6) |
 | §2 dashboard | the team made 1.9–2.1× the model calls at **1.26–1.46× the cost** of the single agent, at equal accuracy (100% vs 100%). The single agent promised an email it has no tool to send in 6/6 runs; the team in 0/6 |
 | §8 Day 1 | the lending specialist sees 1 earlier turn from the orchestrator in the same session (short-term memory) and 0 long-term records yet (6/6); the reply uses the bank's rate range and mentions application `APP-2001` |
-| §3 deploy and discovery | deployed in 36.7–37.9 s. First signed Agent Card GET 5.1–6.7 s (a microVM starts), warm 0.33–0.36 s; an **unsigned GET gets 403**; the card reports protocol version 0.3.0 |
+| §3 deploy and discovery | deployed in 36.7–40.7 s. First signed Agent Card GET 5.1–6.7 s (a microVM starts), warm 0.33–0.36 s; an **unsigned GET gets 403**; the card reports protocol version 0.3.0 |
 | §3 A2A calls | first call 8.0–9.6 s, warm 2.2–2.7 s (on localhost 2.3–2.6 s). The partner wrapped its JSON in code fences on every call (12/12): parse partner output defensively |
 | §5 route | the same in every run: `intake → income_check + credit_bureau → affordability → underwriter → reviewer → underwriter → reviewer → decision_letter`; the reviewer sends the first draft back once |
 | §5 Gantt | `affordability` needs only `income_check`, yet it starts when `credit_bureau` finishes: Strands starts the next batch of nodes only when the whole batch is done. On Runtime the Graph opens a new partner session, so `credit_bureau` is a cold call (8.3–9.4 s) |
 | §5 tokens and letter | the Graph's `accumulated_usage` reported 17.2–19.0k tokens, while the per-node sum and the ledger showed 13.2–13.9k (6/6). Code checks the customer letter: all ✓ in 5/6 runs |
-| §8 records | long-term facts and preferences such as a kitchen remodel starting in November 2026 and "email only", plus a Day-1 session summary in 5/6 runs; ready 91–146 s after the Day-1 session |
+| §8 records | long-term facts and preferences such as a kitchen remodel starting in November 2026 and "email only", plus a Day-1 session summary in 5/6 runs; ready 72–146 s after the Day-1 session |
 | §8 Days 3 and 7 | on Day 3 the cards specialist loads the remodel and the email preference from long-term memory and uses them (6/6); Day 7 mentions the remodel in 5/6 runs. Sofia repeats nothing (6/6) |
-| §9 cost | Nova ≈ $0.07–0.08 for the run (§3 shows $0 because A2A returns no token usage). A Memory line such as 12 events, 5 records stored and 45 records retrieved by 26 searches ≈ $0.03, 2.5–3× §8's Nova cost: retrieval is the largest memory cost in this design. Per unit: agent-as-tool 1.3–1.5× one single-agent answer; the Graph 3.6–4.4× per loan application |
+| §9 cost | Nova ≈ $0.07–0.08 for the run (§3 shows $0 because A2A returns no token usage). A Memory line such as 12 events, 5–8 records stored and 45–63 records retrieved by 26 searches ≈ $0.03–0.04, 2.5–4.3× §8's Nova cost: retrieval is the largest memory cost in this design. Per unit: agent-as-tool 1.3–1.5× one single-agent answer; the Graph 3.6–4.4× per loan application |
 | §10 | `gone ✓` for the runtime, the IAM role, the S3 bucket, the log groups and the memory; the cleanup took about 3 minutes (161–184 s) |
 
 Why does §8 promise an email when §2 flagged exactly that? In §8 Sofia asked for email, and the prompts tell the team
@@ -96,7 +96,7 @@ the Day-1 cell says so.
 | Item | Per run |
 |---|---|
 | Amazon Nova inference (≈ 170–176k input and 6.8–7.6k output tokens, 105–108 model calls) | ≈ $0.07–0.08 |
-| AgentCore Memory (events, records, retrievals) | ≈ $0.025–0.03 |
+| AgentCore Memory (events, records, retrievals) | ≈ $0.025–0.04 |
 | AgentCore Runtime (active CPU and memory seconds; estimate) | < $0.01 |
 | **Total** | **≈ $0.10–0.12** |
 

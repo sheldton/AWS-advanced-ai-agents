@@ -1,6 +1,10 @@
 # MLADAS demo notebooks — pinned to the versions these notebooks were verified with (September 2026)
 strands-agents[a2a,otel]==1.57.1
+opentelemetry-sdk==1.45.0                # M04 checks the OpenTelemetry versions it was verified with
+opentelemetry-exporter-otlp-proto-http==1.45.0
 strands-agents-tools==0.8.9
+opentelemetry-sdk==1.45.0                # M04 checks the OpenTelemetry versions it was verified with
+opentelemetry-exporter-otlp-proto-http==1.45.0
 bedrock-agentcore[a2a]==1.23.1        # a2a extra keeps a2a-sdk on 0.3.x, the version Strands 1.57 speaks
 a2a-sdk>=0.3.26,<0.4
 boto3>=1.43.95                        # AgentCore Runtime platformVersion / Memory namespaceKeys need a recent boto3

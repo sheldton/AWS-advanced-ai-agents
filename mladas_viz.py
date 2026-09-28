@@ -21,6 +21,13 @@ Entity colors (the same everywhere in the course):
           rejected at the door=serious · would deny/LOG_ONLY=warning · error=grey) · ATTACK_COLORS (succeeded /
           partial / stopped) · CONTROL_COLORS: none=grey · identity=blue · policy=violet · guardrail=aqua ·
           network=yellow · audit=magenta.  grid(rows, cols, cell_text, cell_keys) draws a categorical matrix.
+  M04     SPAN_COLORS / SPAN_LABELS (request=yellow · agent=blue · cycle=grey · model=violet · Bedrock API call=magenta ·
+          tool=aqua · ERROR=critical red, hatched) for waterfall(rows) (session -> trace -> span, labels in their own
+          panel, indented) · CHECK_COLORS (deterministic check=yellow · LLM judge=violet) · ROLE_COLORS["judge"]=violet ·
+          EVAL_LABEL_COLORS (pass/partial/fail/error = status steps) · ALARM_COLORS (OK/ALARM/INSUFFICIENT_DATA) ·
+          SAMPLING_COLORS (always on=blue · head=yellow · tail=aqua) · COST_COLORS / COST_LABELS (a run's bill, §4:
+          agents' Nova tokens=blue · judges' Nova tokens=violet · Evaluations fees=magenta · Runtime hosting=yellow ·
+          CloudWatch=aqua · other=grey)
   ordered categories (days, sessions, stages) use ordinal(n): one blue hue, light -> dark
 Projector rule: no text below 9 pt.
 
@@ -90,6 +97,27 @@ ATTACK_LABELS = {"succeeded": "attack succeeded", "partial": "partly stopped", "
 # Which layer of defense in depth (slide 6 / §1.4): categorical, one fixed hue per control
 CONTROL_COLORS = {"none": MUTED, "identity": BLUE, "policy": VIOLET, "guardrail": AQUA, "network": YELLOW,
                   "audit": MAGENTA}
+# M04 Observability entity maps (each is its own chart family)
+ROLE_COLORS["judge"] = VIOLET           # an LLM judge (evaluator); never charted next to "multiagent", which shares the hue
+# Span kinds in a trace waterfall (session -> trace -> span). ERROR is a STATE: it overrides the kind's color.
+SPAN_COLORS = {"request": YELLOW, "agent": BLUE, "cycle": NEUTRAL, "model": VIOLET, "bedrock": MAGENTA,
+               "tool": AQUA, "other": MUTED, "error": STATUS["critical"]}
+SPAN_LABELS = {"request": "Runtime request (POST /invocations)", "agent": "agent (invoke_agent)",
+               "cycle": "event-loop cycle", "model": "model call (chat)", "bedrock": "Bedrock API call (ADOT)",
+               "tool": "tool call (execute_tool)", "other": "other", "error": "ERROR span"}
+# Who judged: a deterministic check (code, like ROLE_COLORS["function"]) vs an LLM judge
+CHECK_COLORS = {"deterministic check": YELLOW, "LLM judge": VIOLET}
+# Evaluation outcomes and alarm states are STATES -> the reserved status steps (+ neutral), always with words too
+EVAL_LABEL_COLORS = {"pass": STATUS["good"], "partial": STATUS["warning"], "fail": STATUS["critical"], "error": NEUTRAL}
+ALARM_COLORS = {"OK": STATUS["good"], "ALARM": STATUS["critical"], "INSUFFICIENT_DATA": NEUTRAL}
+# Sampling strategies (slide 30): categorical
+SAMPLING_COLORS = {"always on": BLUE, "head": YELLOW, "tail": AQUA}
+# What one run's bill is made of (M04 wrap-up): categorical; agents = the Nova 2 Lite model hue, judges = the judge role,
+# Runtime hosting = the Runtime request span's hue
+COST_COLORS = {"agents": BLUE, "judges": VIOLET, "fees": MAGENTA, "runtime": YELLOW, "cloudwatch": AQUA, "other": MUTED}
+COST_LABELS = {"agents": "Nova tokens: the agents", "judges": "Nova tokens: the judges", "fees": "Evaluations fees",
+               "runtime": "Runtime hosting (estimate)", "cloudwatch": "CloudWatch: spans, logs, metrics, alarms",
+               "other": "other booked fees"}
 _BLUE_RAMP = ["#86b6ef", "#5598e7", "#2a78d6", "#1c5cab", "#104281", "#0d366b"]   # ordinal steps 250 -> 700
 
 
@@ -463,6 +491,81 @@ def gantt(spans: Sequence[dict[str, Any]], *, title: str = "Execution timeline",
         _finish(ax, title, f"wall clock {wall:.1f}s  ·  sum of step times {busy:.1f}s")
     else:
         _finish(ax, title)
+    return ax
+
+
+def waterfall(rows: Sequence[dict[str, Any]], *, title: str = "One trace, span by span", subtitle: str | None = None,
+              colors: dict[str, str] | None = None, labels: dict[str, str] | None = None, xlabel: str | None = None,
+              width: float = 10.0, label_share: float = 0.40):
+    """Trace waterfall (M04): session -> trace -> span, nested spans indented, ERROR spans marked.
+
+    rows (agentcore_observability.waterfall_rows builds them; top to bottom = the order given):
+        span   {"name", "depth", "start", "end", "group", "status"[, "note"]}  seconds; group = a SPAN_COLORS key;
+               status "ERROR" -> red, hatched bar + "✗ ERROR"; note = short text after the duration (e.g. tokens)
+        header {"header": "trace 2 · 6ab9e9c8…  (9 spans)"}  a bold separator row (several traces in one chart)
+    Labels sit in their own left panel, left-aligned and indented by depth (right-aligned tick labels lose the
+    indentation). Text >= 9.5 pt, width <= 10.5 in. Returns the bar axes (ax.figure is the figure)."""
+    import matplotlib.gridspec as gridspec
+    from matplotlib.patches import Patch
+
+    colors = {**SPAN_COLORS, **(colors or {})}
+    labels = {**SPAN_LABELS, **(labels or {})}
+    n = max(len(rows), 1)
+    fig = plt.figure(figsize=(min(width, 10.5), 0.34 * n + 1.9))
+    gs = gridspec.GridSpec(1, 2, width_ratios=[label_share, 1 - label_share], wspace=0.01, figure=fig)
+    lax, ax = fig.add_subplot(gs[0]), fig.add_subplot(gs[1])
+    spans = [r for r in rows if "header" not in r]
+    t_end = max((r["end"] for r in spans), default=1.0) or 1.0
+    max_chars = int(62 * label_share / 0.40)
+    used: list[str] = []
+    for i, r in enumerate(rows):
+        if "header" in r:
+            lax.text(0.0, i, str(r["header"]), va="center", ha="left", fontsize=10, fontweight="bold", color=INK,
+                     transform=lax.get_yaxis_transform())
+            ax.axhline(i + 0.5, color=GRID, linewidth=0.8)
+            continue
+        depth = int(r.get("depth", 0))
+        name = str(r["name"])
+        room = max(8, max_chars - 3 * depth)
+        name = name if len(name) <= room else name[: room - 1] + "…"
+        is_err = str(r.get("status", "")).upper() == "ERROR"
+        lax.text(0.01 + 0.035 * depth, i, ("└ " if depth else "") + name, va="center", ha="left", fontsize=9.5,
+                 color=STATUS["critical"] if is_err else INK_2, fontweight="bold" if is_err else "normal",
+                 transform=lax.get_yaxis_transform())
+        group = "error" if is_err else r.get("group", "other")
+        used.append(group)                            # the legend lists only colors that are drawn
+        dur = max(0.0, r["end"] - r["start"])
+        ax.barh(i, dur, left=r["start"], height=0.58, color=colors.get(group, MUTED),
+                hatch="///" if is_err else None, edgecolor=SURFACE if not is_err else INK, linewidth=0.6)
+        tiny = dur < t_end * 0.012
+        if tiny:                                      # near-instant spans stay visible as a diamond
+            ax.scatter(r["start"], i, marker="D", s=34, color=colors.get(group, MUTED), zorder=3)
+        txt = f"{dur * 1000:.0f} ms" if dur < 1 else f"{dur:.2f} s"
+        if r.get("note"):
+            txt += f"  {r['note']}"
+        if is_err:
+            txt += "  ✗ ERROR"
+        ax.text(r["end"] + t_end * (0.03 if tiny else 0.012), i, txt, va="center", fontsize=9.5,
+                color=STATUS["critical"] if is_err else INK_2, fontweight="bold" if is_err else "normal")
+    for a in (lax, ax):
+        a.set_ylim(n - 0.5, -0.5)
+        a.set_yticks([])
+        a.grid(axis="y", visible=False)
+    lax.set_xlim(0, 1)
+    lax.axis("off")
+    ax.set_xlim(0, t_end * 1.30)
+    ax.spines["left"].set_visible(False)
+    ax.set_xlabel(xlabel or "seconds since the first span started")
+    order = [g for g in colors if g in set(used)]
+    handles = [Patch(facecolor=colors[g], edgecolor=INK if g == "error" else colors[g], hatch="///" if g == "error" else None,
+                     label=labels.get(g, g)) for g in order]
+    if len(handles) > 1:
+        ax.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.30, -0.10 - 0.9 / n), ncols=min(len(handles), 3),
+                  fontsize=9.5, handlelength=1.4)
+    fig.suptitle(title, x=0.01, y=0.995, ha="left", va="top", fontsize=13, fontweight="bold", color=INK)
+    if subtitle:
+        fig.text(0.01, 0.995 - 0.42 / (0.34 * n + 1.9), subtitle, ha="left", va="top", fontsize=10, color=INK_2)
+    fig.subplots_adjust(top=1 - (0.75 if subtitle else 0.55) / (0.34 * n + 1.9), left=0.01, right=0.99)
     return ax
 
 

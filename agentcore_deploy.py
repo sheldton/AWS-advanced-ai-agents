@@ -10,6 +10,10 @@ Everything created is named/tagged with the notebook's RUN_ID and removed by `te
 
 The deployment runs in a background thread so the notebook can keep teaching while it builds:
     job = RuntimeDeployment(...).start()   ...   job.wait(); job.runtime_arn
+
+M04 (2026-09-28): entry_point may be a list, e.g. ["opentelemetry-instrument", "agent.py"] (ADOT auto-instrumentation
+with aws-opentelemetry-distro in requirements.txt), and bucket= names the run-scoped bucket. Both are backward compatible
+(M01 passes neither). agentcore_observability.RuntimeObsDeployment builds on this class.
 """
 
 from __future__ import annotations
@@ -35,10 +39,13 @@ class RuntimeDeployment:
     """Package -> upload -> IAM role -> CreateAgentRuntime -> wait READY, in a background thread."""
 
     def __init__(self, *, name: str, source_dir: str | Path, run_id: str, session: boto3.Session,
-                 entry_point: str = "agent.py", protocol: str = "A2A", python_runtime: str = "PYTHON_3_12",
+                 entry_point: str | list[str] = "agent.py", protocol: str = "A2A", python_runtime: str = "PYTHON_3_12",
                  model_ids: tuple[str, ...] = ("us.amazon.nova-2-lite-v1:0",), environment: dict[str, str] | None = None,
                  platform_version: str | None = None, description: str = "MLADAS demo agent",
-                 tags: dict[str, str] | None = None):
+                 tags: dict[str, str] | None = None, bucket: str | None = None):
+        """entry_point: "agent.py" (M01) or a list, e.g. ["opentelemetry-instrument", "agent.py"] to start the agent
+        under ADOT auto-instrumentation (M04; needs aws-opentelemetry-distro in requirements.txt).
+        bucket: the run-scoped S3 bucket name (default mladas-<account>-<run suffix>)."""
         self.session, self.run_id = session, run_id
         self.region = session.region_name
         self.account = session.client("sts").get_caller_identity()["Account"]
@@ -48,7 +55,7 @@ class RuntimeDeployment:
         self.entry_point, self.protocol, self.python_runtime = entry_point, protocol, python_runtime
         self.model_ids, self.environment = model_ids, dict(environment or {})
         self.platform_version, self.description = platform_version, description
-        self.bucket = f"mladas-{self.account}-{suffix}"[:63]
+        self.bucket = (bucket or f"mladas-{self.account}-{suffix}")[:63]
         self.key = f"{self.name}/code.zip"
         base = name.replace("_", "-")
         prefix = base if base.startswith("mladas") else f"mladas-{base}"
@@ -113,7 +120,7 @@ class RuntimeDeployment:
         build = Path(tempfile.mkdtemp(prefix="mladas-pkg-"))
         pkg = build / "pkg"
         pyver = self.python_runtime.replace("PYTHON_", "").replace("_", ".")
-        req = self.source_dir / "requirements.txt"
+        req = (self.source_dir / "requirements.txt").resolve()
         # Jupyter launched from a GUI may not have Homebrew on PATH, so also look in the usual install locations
         uv = shutil.which("uv") or next((str(c) for c in (Path("/opt/homebrew/bin/uv"), Path("/usr/local/bin/uv"),
                                                            Path.home() / ".local/bin/uv", Path.home() / ".cargo/bin/uv")
@@ -121,11 +128,19 @@ class RuntimeDeployment:
         if uv:
             cmd = [uv, "pip", "install", "-q", "--python-platform", "aarch64-manylinux2014", "--python-version", pyver,
                    "--only-binary", ":all:", "--target", str(pkg), "-r", str(req)]
+            # Console scripts (bin/opentelemetry-instrument, M04) get the discovering interpreter as their shebang. From
+            # a notebook uv finds ../.venv; if that path has a space, uv writes a /bin/sh wrapper that execs the
+            # local machine's python -> "Runtime initialization time exceeded" on AgentCore (observed 2026-09-28).
+            # So: run from the build dir, without VIRTUAL_ENV, with the real (space-free) interpreter path when possible.
+            real_py = os.path.realpath(sys.executable)
+            if " " not in real_py:
+                cmd[3:3] = ["--python", real_py]
         else:
             cmd = [sys.executable, "-m", "pip", "install", "-q", "--platform", "manylinux2014_aarch64",
                    "--python-version", pyver, "--implementation", "cp", "--only-binary=:all:",
                    "--target", str(pkg), "-r", str(req)]
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        env = {k: v for k, v in os.environ.items() if k not in ("VIRTUAL_ENV", "CONDA_PREFIX", "UV_PYTHON", "PYTHONHOME")}
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600, cwd=str(build), env=env)
         if proc.returncode:
             shutil.rmtree(build, ignore_errors=True)
             raise RuntimeError(f"packaging failed ({proc.returncode}): {proc.stderr.strip()[-600:]}")
@@ -201,7 +216,9 @@ class RuntimeDeployment:
             agentRuntimeName=self.name, description=self.description,
             agentRuntimeArtifact={"codeConfiguration": {
                 "code": {"s3": {"bucket": self.bucket, "prefix": self.key}},
-                "runtime": self.python_runtime, "entryPoint": [self.entry_point]}},
+                "runtime": self.python_runtime,
+                "entryPoint": list(self.entry_point) if isinstance(self.entry_point, (list, tuple))
+                else [self.entry_point]}},
             roleArn=self.role_arn, networkConfiguration={"networkMode": "PUBLIC"},
             protocolConfiguration={"serverProtocol": self.protocol},
             environmentVariables=self.environment, tags=self.tags,
@@ -314,7 +331,11 @@ class RuntimeDeployment:
             if e.response["Error"]["Code"] != "NoSuchBucket":
                 done.append(f"S3: {e.response['Error']['Code']}")
         for d in Path(tempfile.gettempdir()).glob("mladas-pkg-*"):   # packaging leftovers from interrupted runs
-            shutil.rmtree(d, ignore_errors=True)
+            try:                                                      # (never another notebook's packaging in flight)
+                if time.time() - d.stat().st_mtime > 3600:
+                    shutil.rmtree(d, ignore_errors=True)
+            except OSError:
+                pass
         return done
 
 
