@@ -1,0 +1,13 @@
+# Python / Jupyter
+.venv/
+__pycache__/
+.ipynb_checkpoints/
+.DS_Store
+
+# Local state a demo run writes into its module folder (never commit it)
+*/demo20/_runs/
+.m0*_run_ids
+.m03_3lo_login.txt
+.agentcore.json
+.sessions/
+.workflows/

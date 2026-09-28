@@ -1,0 +1,3 @@
+# Runtime dependencies of the partner Credit Bureau agent (installed as linux/arm64 wheels for AgentCore Runtime)
+strands-agents[a2a]==1.57.1
+bedrock-agentcore[a2a]==1.23.1
