@@ -4,8 +4,8 @@
 
 | | |
 |---|---|
-| Notebook | [`M04_observability_demo20.ipynb`](M04_observability_demo20.ipynb) (run this) · [`M04_observability_demo20_executed.ipynb`](M04_observability_demo20_executed.ipynb) (the outputs of a verified run) |
-| Time | about 20 minutes to walk through, plus 5–12 minutes of setup lead |
+| Notebook | [`M04_observability_demo15.ipynb`](M04_observability_demo15.ipynb) (run this) · [`M04_observability_demo15_executed.ipynb`](M04_observability_demo15_executed.ipynb) (the outputs of a verified run) |
+| Time | about 15 minutes to walk through, plus 5–10 minutes of setup lead |
 | Models | Amazon Nova 2 Lite (the agents and every judge), us-east-1 |
 | Cost | ≈ $0.05–0.09 per run |
 | Account setting | **CloudWatch Transaction Search must be on** in us-east-1 (see [below](#turn-on-cloudwatch-transaction-search)); the notebook only reads it |
@@ -20,22 +20,25 @@ Prerequisites, setup and licenses are in the [repository README](../README.md).
 
 ## What you'll see
 
-1. **Session → trace → span, and a tool that fails inside a request that succeeds** (§1 · slides 4, 8–15, 18,
-   21–26, 30, 31). The bank agent on AgentCore Runtime contains no tracing code: the AWS Distro for OpenTelemetry
-   (ADOT) adds the spans. The notebook reads James's three requests back from CloudWatch as a span tree and a waterfall.
-   His fraud check times out, yet the request answers with HTTP 200: the Runtime's `Errors` metric stays at 0, and
-   only the log and the trace show the failure. A local agent then sends the same kind of spans to three places at
-   once (memory, an OTLP receiver that stands in for another vendor's backend, and CloudWatch), and 2,000 synthetic
-   traces show what head sampling throws away.
-2. **A looping agent trips two live CloudWatch alarms** (§2 · slides 5, 7, 27–29). A wire assistant polls a wire
-   that stays `PENDING`. Nothing fails, and it burns about 6× the tokens of a normal session. A Strands hook publishes
+1. **Session → trace → span, and a tool that fails inside a request that succeeds** (§1 · slides 4, 8, 12–15,
+   21–26, 31). The bank agent on AgentCore Runtime contains no tracing code: the AWS Distro for OpenTelemetry (ADOT)
+   adds the spans. The notebook reads James's three requests back from CloudWatch as a span tree and a waterfall. His
+   fraud check times out, yet the request answers with HTTP 200: the Runtime's `Errors` metric stays at 0, and only the
+   log and the trace show the failure. A local agent then sends the same kind of spans to three places at once
+   (memory, an OTLP receiver that stands in for another vendor's backend, and CloudWatch).
+2. **A looping agent trips two live CloudWatch alarms** (§2 · slides 7, 27–28). A wire assistant polls a wire that
+   stays `PENDING`. Nothing fails, and it burns about 6× the tokens of a normal session. A Strands hook publishes
    per-session metrics; a loop-detection alarm and a cost-protection alarm (10-second periods, actions off) fire
-   within seconds. The deck's session-duration alarm is checked against what the service really publishes.
-3. **AgentCore Evaluations with Nova judges, on demand and online** (§3 · slides 17, 33–48, 53, 54). Built-in
-   evaluators re-created on a Nova 2 Lite judge, plus a custom judge for the bank's investment-disclaimer rule. The
-   savings coach is graded with and without the rule, locally and on AgentCore Runtime; then the notebook reads the
-   results that an online evaluation wrote for the setup's warm-up conversations, with no call from the notebook.
-4. **What was measured, what it cost, cleanup verified by id** (§4 · slides 6, 49, 55, 56).
+   within seconds.
+3. **AgentCore Evaluations with Nova judges, on demand and online** (§3 · slides 37–48, 53). Built-in evaluators
+   re-created on a Nova 2 Lite judge, plus a custom judge for the bank's investment-disclaimer rule. The savings coach
+   is graded with and without the rule, locally and on AgentCore Runtime; then the notebook reads the results that an
+   online evaluation wrote for the setup's warm-up conversations, with no call from the notebook. One discussion
+   question follows.
+4. **What was measured, what it cost, cleanup verified by id** (§4 · slides 6, 49, 55).
+
+Head vs tail sampling, the deck's session-duration alarm and the full catalog of built-in evaluators are part of the
+full module, not of this demo.
 
 ## Before you run
 
@@ -117,13 +120,13 @@ The §0 cells start four parts in the background:
 
 | Part | What setup creates | Ready after (our runs) |
 |---|---|---|
-| runtime → warm-up | the bank agent on AgentCore Runtime (HTTP protocol, direct code deployment with ADOT, entry point `opentelemetry-instrument agent.py`): an S3 bucket for its code package, an IAM execution role, the runtime and its CloudWatch log groups. Then two warm-up conversations with the savings coach (without and with the disclaimer rule, 2 turns each) | ~1–1.5 min |
-| evaluators → online | 4 evaluators with a Nova 2 Lite judge (3 derived from built-ins: Helpfulness, GoalSuccessRate, ToolSelectionAccuracy; 1 custom disclaimer judge), then an online evaluation configuration on the runtime's log group with its own IAM role and results log group (100 % sampling) | ~5 s, then ~2 s after the runtime |
-| alarms | one normal wire-agent session (the token baseline), then 2 high-resolution CloudWatch alarms with actions disabled, on custom metrics in the namespace `MLADAS/M04` | ~15 s |
+| runtime → warm-up | the bank agent on AgentCore Runtime (HTTP protocol, direct code deployment with ADOT, entry point `opentelemetry-instrument agent.py`): an S3 bucket for its code package, an IAM execution role, the runtime and its CloudWatch log groups. Then §1's session is warmed, and two warm-up conversations run with the savings coach (without and with the disclaimer rule, 2 turns each) | ~1–1.5 min |
+| evaluators → online | 4 evaluators with a Nova 2 Lite judge (3 derived from built-ins: Helpfulness, GoalSuccessRate, ToolSelectionAccuracy; 1 custom disclaimer judge), then an online evaluation configuration on the runtime's log group with its own IAM role and results log group (100 % sampling) | ~5 s, then right after the runtime |
+| alarms | one normal wire-agent session (the token baseline), then 2 high-resolution CloudWatch alarms with actions disabled, on custom metrics in the namespace `MLADAS/M04` | ~5 s |
 | telemetry | one OpenTelemetry pipeline in the kernel for the local agents: in memory, a small OTLP receiver on `127.0.0.1` (random port), and CloudWatch through the X-Ray OTLP endpoint | instant |
 
 Every name contains the `RUN_ID` with its hyphens removed (`mladas-m04-…` or `mladas_m04_…`). The readiness check
-(0.5) returned 64–70 s after setup started in our runs.
+(0.5) returned 75–115 s after setup started in our runs.
 
 Two more things change in the account while a run lasts:
 - Creating the online evaluation adds a field index policy (`resource.attributes.service.name`) to the `aws/spans`
@@ -137,18 +140,18 @@ Two more things change in the account while a run lasts:
 ## Run it
 
 1. Check that Transaction Search is `ACTIVE` (above).
-2. Open `M04_observability_demo20.ipynb` with the kernel **MLADAS (Python 3.12)**.
-3. **Run §0, down to and including 0.5 "Ready check", 5–12 minutes before you go on to §1.** Write down the printed
+2. Open `M04_observability_demo15.ipynb` with the kernel **MLADAS (Python 3.12)**.
+3. **Run §0, down to and including 0.5 "Ready check", 5–10 minutes before you go on to §1.** Write down the printed
    `RUN_ID`. The last line should read `Ready: 5/5 parts READY · … · online results expected in ~10 min`. Two timers
    matter:
-   - The **online evaluation** scores a session about 10 minutes after it ends (6–11 minutes in our runs). §3.4 reads
-     the results for the warm-up conversations, so it needs §0 to have finished about 10 minutes earlier.
+   - The **online evaluation** scores a session about 10 minutes after it ends. §3.4, about 10 minutes into the demo,
+     reads the results for the warm-up conversations, so it needs §0 to have finished well before.
    - §1's Runtime session was warmed by §0 and **idles out after 15 minutes**. If you wait longer, §1's first request
      includes a cold start (5–8 s more); nothing else changes.
 4. Run §1, §2 and §3 in order. Each cell prints its evidence and a ✓/✗ check. §3 ends with one question marked
-   **Think about it**.
+   **Think about it**. After the setup lead, the cells of §1–§4 execute in about 1.5 minutes (87–105 s in our runs).
 5. Run §4 to the end. Its first cell books the charges that bill by time or volume and starts the cleanup in the
-   background; the last cell waits up to 90 s and checks every resource by id.
+   background; the last cell checks every resource by id (about 30 s).
 
 With *Run All*, §3.4 comes about a minute after the warm-ups ended, too early for results: it prints
 `Batch evaluation: TOO_EARLY` and a ⚠ line with the minutes to wait. Re-run that cell later: once the warm-ups are
@@ -168,25 +171,25 @@ recorded or local results, labelled as such):
 | `M04_FORCE_FAIL=runtime`, `evaluations`, `alarms` or `otlp` | makes that part fail on purpose, so you can see the fallback |
 | `M04_RUN_ID=<RUN_ID>` | adopt an existing run's resources (after a kernel restart) |
 
+With the Runtime, the evaluators, the alarms and the online evaluation all off, the notebook runs in about 30 s and
+creates nothing.
+
 ## Expected results
 
-In our test runs (Sept 2026: 8 fresh runs, 4 with every cell back to back and 4 with a pause after setup as described
-above); "x/N" counts checks within a run.
+In our test runs (Oct 2026: 6 fresh runs, 2 with every cell back to back and 4 with a 12-minute pause after setup as
+described above); "x/N" counts checks within a run.
 
 | Section | What you should see |
 |---|---|
-| §1.1 traces | the entry point read from the live runtime, `['opentelemetry-instrument', 'agent.py']`, and 0 calls that create spans in `agent.py`; Transaction Search `CloudWatchLogs / ACTIVE`. James's 3 requests: 3 traces of 9 spans each (27 in all), warm requests 1.2–1.6 s, the one with the outage 2.4–3.1 s. `✓ Tokens … 3/3` (the `invoke_agent` counters grow about 2,500 → 5,600 → 9,300 because they are cumulative), `✓ session.id is on the spans Strands never created too` (SERVER 3/3, CLIENT 6/6), `✓ Every trace complete … after 1.3–8.8 s` |
-| §1.2 failed tool | waterfall title "get_fraud_score failed after 1.2 s, and the request still answered after 2.2–2.8 s". Metric `Errors 0` over 3–8 invocations, log `tool_errors=1`, the trace names the span; the span record shows status `ERROR` and an `exception` event `TimeoutError`, with three ✓ lines (no ERROR above it, HTTP 200 answer, graceful wording) |
+| §1.1 traces | the entry point read from the live runtime, `['opentelemetry-instrument', 'agent.py']`, and 0 calls that create spans in `agent.py`; Transaction Search `CloudWatchLogs / ACTIVE`. James's 3 requests: 3 traces of 9 spans each (27 in all), warm requests 1.2–2.0 s, the one with the outage 2.6–3.3 s. `✓ Tokens … 3/3` (the `invoke_agent` counters grow about 2,500 → 5,600 → 9,300 because they are cumulative), `✓ session.id is on the spans Strands never created too` (SERVER 3/3, CLIENT 6/6), `✓ Every trace complete … after 4.5–5.2 s` |
+| §1.2 failed tool | the waterfall: `get_fraud_score` failed after 1.2 s ("did not answer within 1.2 s (upstream 504)"), and the request still answered. Metric `Errors 0` over 3–8 invocations, log `tool_errors=1`, the trace names the span, with three ✓ lines (no ERROR above it, HTTP 200 answer, graceful wording) |
 | §1.3 three places | 15 spans, `✓ 15/15` at the OTLP receiver and in CloudWatch; gzip 78–84 % smaller; CloudWatch adds 6 attributes at ingestion; `✓ get_card_status spans in order: ERROR → OK` (failed once, retried) |
-| §1.4 sampling | 2,000 synthetic traces: head sampling at 20 % stores 79 % fewer spans but keeps only 39 of 190 error traces; tail sampling keeps 190/190 and still stores 72 % fewer. §1's own 5 traces are too few to show a rate: which ones head sampling keeps changes every run |
-| §2.1 loop | loop: about 14,800 tokens, 10 tool calls, stop reason `limit_turns`, an empty reply to Sofia and 0 ERROR spans of 31; normal session about 2,300 tokens → **6.4×** |
-| §2.2 alarms | both alarms went to ALARM in every run: 10–24 s after their condition was met and 7–22 s after the 10-turn cap had already stopped the agent (the cap stopped it after 6.7–9.0 s) |
-| §2.3 slide 29 | the deck's alarm (retyped with our own names) fails with `SyntaxError: unterminated string literal`; `'region' is not a Region`; `bedrock-agentcore / Duration series: 0`; the runtime's `lifecycleConfiguration` is 900 s idle / 28,800 s maximum |
-| §3.1 evaluators | "AWS built-ins today: 18 (SESSION 4, TOOL_CALL 4, TRACE 10) + 13 third-party"; the deck's `agentcore_evaluation` package: not installed (it does not exist); judge = Amazon Nova on 4/4 evaluators |
-| §3.2 local coaches | the S&P 500 question: **NonCompliant without the rule, Compliant with it**, and the code check agrees 2/2; the balance replies: Compliant 2/2 although the sentence is in 0/2 (the judge also decides whether a reply is investment guidance) |
-| §3.3 Runtime session | 7/7 results from 4 evaluators: GoalSuccessRate Yes, Helpfulness "Very Helpful 0.83" on both turns, disclaimer Compliant (balance) and NonCompliant (S&P 500), ToolSelectionAccuracy Yes on both turns. 11 on-demand evaluations: $0.0165 in fees plus about $0.007 of Nova judge tokens |
-| §3.4 online | with the setup lead: the configuration table, "online results for them so far: 10 of 10", a chart "Online evaluation: 10 results, logged 10–11 min after the warm-ups ended" and the same label as §3.3 on 5/5. Back to back: `TOO_EARLY` and a ⚠ line (see [Run it](#run-it)) |
-| §4 wrap-up | 4.1: one line per highlight with the numbers above; 4.2: the bill (see [Cost](#cost)); 4.3: `14 gone ✓ · 0 NOT CLEANED` about 36–37 s after the cleanup started, then "All resources of RUN_ID … are gone, each checked by id." |
+| §2.1 loop | loop: about 14,800 tokens, 10 tool calls, stop reason `limit_turns`, 0 ERROR spans of 31; normal session about 2,300 tokens → **6.4×** |
+| §2.2 alarms | both alarms went to ALARM in every run: 12–27 s after their condition was met and 9–22 s after the 10-turn cap had already stopped the agent (the cap stopped it after about 7 s) |
+| §3.2 local coaches | the S&P 500 question: **NonCompliant without the rule, Compliant with it**, and the code check agrees 2/2; the balance replies pass the judge without the sentence (the judge also decides whether a reply is investment guidance) |
+| §3.3 Runtime session | 7 results from 4 evaluators: GoalSuccessRate Yes, Helpfulness "Very Helpful 0.83" on both turns, disclaimer Compliant (balance) and NonCompliant (S&P 500), ToolSelectionAccuracy Yes on both turns. 11 on-demand evaluations: $0.0165 in fees plus about $0.007 of Nova judge tokens |
+| §3.4 online | with the setup lead: the configuration table, "online results for them so far: 10 of 10", a chart "Online evaluation: 10 results, logged 10 min after the warm-ups ended" and the same label as §3.3 on 5/5. Back to back: `TOO_EARLY` and a ⚠ line (see [Run it](#run-it)) |
+| §4 wrap-up | 4.1: one line per highlight with the numbers above; 4.2: the bill (see [Cost](#cost)); 4.3: `14 gone ✓ · 0 NOT CLEANED` about 31–35 s after the cleanup started, then "All resources of RUN_ID … are gone, each checked by id." |
 
 The `_executed` copy comes from a run that paused 12 minutes after §0, as described in [Run it](#run-it), so its §3.4
 shows the online results. A run that executes every cell back to back reaches §3.4 about a minute after the warm-ups
@@ -198,18 +201,18 @@ and shows the `TOO_EARLY` path instead.
 
 | Item | Back to back | With the setup lead |
 |---|---|---|
-| Nova 2 Lite tokens, the agents (warm-ups, baseline, §1, the loop, §3's coaches) | $0.021–0.022 | $0.021 |
-| Nova judge tokens: on demand (measured) + online (estimated) | $0.007 | $0.015–0.020 |
-| AgentCore Evaluations, $0.0015 per evaluation | $0.0165 (11) | $0.032–0.042 (21–28) |
+| Nova 2 Lite tokens, the agents (warm-ups, baseline, §1, the loop, §3's coaches) | $0.021 | $0.021 |
+| Nova judge tokens: on demand (measured) + online (estimated) | $0.007 | $0.017 |
+| AgentCore Evaluations, $0.0015 per evaluation | $0.0165 (11) | $0.036 (24) |
 | AgentCore Runtime hosting (estimated from vCPU- and GB-hours) | $0.001 | $0.003 |
 | CloudWatch: alarms, custom metrics, `PutMetricData`, span ingestion, Logs Insights | $0.0006 | $0.0009 |
-| **Total (§4's bill line)** | **≈ $0.05** | **≈ $0.07–0.09** |
+| **Total (§4's bill line)** | **≈ $0.05** | **≈ $0.08** |
 
-With the setup lead the online evaluation also scores §1's session if it has gone idle before §4 runs, which adds
-evaluations. Not in the ledger, each under $0.001: S3 storage of the code package, X-Ray span indexing, other
-CloudWatch reads, IAM (free). If you skip the cleanup, the two high-resolution alarms keep costing $0.30 each per
-month, the online evaluation configuration keeps scoring (and billing) any new session of the Runtime agent, and the
-rest costs little while unused. Delete everything anyway.
+With the setup lead the online evaluation may also score §1's session if it has gone idle before §4 runs, which adds
+evaluations (up to about $0.09 in all). Not in the ledger, each under $0.001: S3 storage of the code package, X-Ray
+span indexing, other CloudWatch reads, IAM (free). If you skip the cleanup, the two high-resolution alarms keep costing
+$0.30 each per month, the online evaluation configuration keeps scoring (and billing) any new session of the Runtime
+agent, and the rest costs little while unused. Delete everything anyway.
 
 ## Cleanup
 
@@ -251,19 +254,20 @@ Transaction Search (see [turning it back off](#turn-on-cloudwatch-transaction-se
   re-run §2 within that time. Wait a minute and re-run §2.
 - **§3.4 prints `TOO_EARLY`.** The warm-ups are less than ~5 minutes old: re-run the cell later (see [Run it](#run-it)).
 - **The kernel restarted.** Set `M04_RUN_ID=<RUN_ID>` in the shell that starts Jupyter (or run
-  `%env M04_RUN_ID=<RUN_ID>` in a new first cell) and run §0 again: it adopts every resource in about 30 s, but it also
-  sends new warm-ups, so the online results come about 10 minutes after that.
+  `%env M04_RUN_ID=<RUN_ID>` in a new first cell) and run §0 again: it adopts every resource, but it also sends new
+  warm-ups, so the online results come about 10 minutes after that.
 - **Throttling** shows as slower requests and retries: check your Bedrock quotas for Nova 2 Lite.
+- **Some text mentions §1.4, §2.3, §3.1 or other missing subsections.** They are in the longer module notebook, which
+  is not in this repository.
 
 ## Known variance
 
-- **Alarm timing:** 10–24 s after the condition in these runs (11–28 s in other tests). Sometimes the cost alarm fires
-  first, sometimes the loop alarm.
-- **Online results** arrived 10–11 minutes after the warm-ups in all four runs with a setup lead (6–11 minutes in other
-  tests). The service can write `ValidationException` rows for §1's session (its warm-up call has no agent span); §3.4
-  reads only the warm-up sessions.
-- **Judges vary:** ToolSelectionAccuracy said "No" once in 18 of our section runs. Read the judge's explanation, not
-  only its label.
+- **Setup time:** 75–93 s in most runs, 115 s once while the account was busy.
+- **Alarm timing:** 12–27 s after the condition. Sometimes the cost alarm fires first, sometimes the loop alarm.
+- **Online results** arrived 10 minutes after the warm-ups in both runs with a setup lead (6.5–11 minutes in other
+  tests). The online configuration also scores §1's session; §3.4 reads only the warm-up sessions, and §4 may count a
+  few more online results (and fees) if §1's are in by then.
+- **Judges vary:** read the judge's explanation, not only its label.
 - **Model wording** changes from run to run: compare the ✓/✗ checks and the x/N counts, not the prose.
 - **Your account's traffic:** §1.2's invocation count includes the warm-up calls made in the same minutes (3–8), and
   other applications that write to `aws/spans` don't affect the demo (it filters by session id).

@@ -1,7 +1,5 @@
 # MLADAS demo notebooks — pinned to the versions these notebooks were verified with (September 2026)
 strands-agents[a2a,otel]==1.57.1
-opentelemetry-sdk==1.45.0                # M04 checks the OpenTelemetry versions it was verified with
-opentelemetry-exporter-otlp-proto-http==1.45.0
 strands-agents-tools==0.8.9
 opentelemetry-sdk==1.45.0                # M04 checks the OpenTelemetry versions it was verified with
 opentelemetry-exporter-otlp-proto-http==1.45.0
